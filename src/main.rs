@@ -19,12 +19,11 @@
 // explicit code needed, like "AsOciNum::capped_size()"
 
 
-/// This macro generates the trait.   This ensures that all type support traiys
-/// have the same methods etc
+/// This macro generates the trait.   This ensures that all type support traits
+/// have the same methods
 macro_rules! sqlt_trait{
-    ($trait_name:ident, $sqlt:expr) => {
-
-        #[doc ="Trait that types need to implement to be used"]
+    ($trait_name:ident, $sqlt:expr, $capped_size:expr) => {
+        #[doc="$sqlt"]
         pub trait $trait_name {
             /// Sets the OCI SQLT_xxx type represented by this trait
             fn oci_sqlt() -> u16 {
@@ -32,7 +31,12 @@ macro_rules! sqlt_trait{
             }
 
             /// Implementors use to write the bytes in accordance with spec for $sqlt
-            fn write(&self, _slice: &mut [u8]) -> u16 ;
+            fn oci_write(&self, _slice: &mut [u8]) -> u16 ;
+
+            /// Non-instance method - to get fixed size for the type (if needed)
+            fn oci_capped_size() -> Option<u16> {
+                $capped_size
+            }
         }
     }
 }
@@ -42,34 +46,46 @@ const SQLT_CHR:u16 = 1234;
 const SQLT_INT:u16 = 1235;
 const SQLT_NUM:u16 = 1235;
 
-sqlt_trait!(AsOciChr, SQLT_CHR);
-sqlt_trait!(AsOciInt, SQLT_INT);
-sqlt_trait!(AsOciNum, SQLT_NUM);
+sqlt_trait!(AsOciChr, SQLT_CHR, None);
+sqlt_trait!(AsOciInt, SQLT_INT, Some(8));
+sqlt_trait!(AsOciNum, SQLT_NUM, Some(21));
 
 // -- -- sample imples for i32
 impl AsOciInt for i32 {
-    fn write(&self, slice: &mut [u8]) -> u16 {
+    fn oci_write(&self, slice: &mut [u8]) -> u16 {
         let x  = self.to_ne_bytes();
         slice[0] = x[0];
         slice[1] = x[1];
         slice[2] = x[2];
         slice[3] = x[3];
-        4
+        std::mem::size_of::<i32>() as u16
     }
+
+    // fn oci_capped_size() -> Option<u16> {
+    //     Some(4u16)
+    // }
 }
 
 impl AsOciInt for i16 {
-    fn write(&self, slice: &mut [u8]) -> u16 {
+    fn oci_write(&self, slice: &mut [u8]) -> u16 {
         let x  = self.to_ne_bytes();
         slice[0] = x[0];
         slice[1] = x[1];
-        4
+        2
+    }
+    fn oci_capped_size() -> Option<u16> {
+        Some(2u16)
     }
 }
 
 impl AsOciNum for i32 {
-    fn write(&self, _slice: &mut [u8]) -> u16 {
+    fn oci_write(&self, _slice: &mut [u8]) -> u16 {
         todo!()
+    }
+
+    // The capped size should be in the trait!
+    fn oci_capped_size() -> Option<u16> {
+        Some(21u16)
     }
 }
 
@@ -96,8 +112,9 @@ pub mod param {
 
             let mut v = Vec::with_capacity(10);
             v.resize(10, 0);
-            let result = $to_oci.write(v.as_mut_slice());
-            println!("Set column {}, sloice {:?}", $col, result);
+            let result = $to_oci.oci_write(v.as_mut_slice());
+            println!("Set column {}, size {:?}, capped: {:?}", $col, result, T::oci_capped_size());
+
         };
     }
 

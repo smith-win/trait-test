@@ -6,3 +6,8 @@ help implement a tpye-safe binding for binding params to OCI.
  - Generating traits from macros
  - Using macros to then apply comon functions these traits, avoiding dynamic dispatch
 
+
+
+References:
+
+https://blog.logrocket.com/macros-in-rust-a-tutorial-with-examples/
